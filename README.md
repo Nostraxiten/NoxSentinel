@@ -1,5 +1,5 @@
 # Nox Sentinel
-<img width="429" height="452" alt="image" src="https://github.com/user-attachments/assets/b7decd3f-960d-445b-9298-9c885fa23ba1" />
+<img width="429" height="452" alt="Captura de pantalla 2026-08-27 164452" src="https://github.com/user-attachments/assets/2acf7a65-35fc-48ba-a76e-96cee3df7637" />
 
 **A local security posture auditor.** Nox Sentinel inspects the machine it
 runs on for hardening weaknesses — insecure file permissions, exposed
