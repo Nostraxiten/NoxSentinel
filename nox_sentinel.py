@@ -23,11 +23,22 @@ from pathlib import Path
 # Make the package importable when run as a loose script.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Ensure UTF-8 output on Windows consoles to prevent charmap UnicodeEncodeError
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from sentinel import __version__
 from sentinel.checks import build_checks, known_categories
 from sentinel.core import Report, Severity
 from sentinel.engine import run_audit
 from sentinel import ui
+
 
 
 def _progress(index: int, total: int, check) -> None:
@@ -64,6 +75,8 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="list the checks that would run and exit")
     p.add_argument("--list-categories", action="store_true",
                    help="list available categories and exit")
+    p.add_argument("-w", "--watch", type=int, nargs="?", const=5, metavar="SECS",
+                   help="continuously audit every N seconds (default 5)")
     p.add_argument("--fail-on", metavar="SEV", default=None,
                    choices=[s.label.lower() for s in Severity if s >= Severity.LOW],
                    help="exit non-zero if any finding reaches this severity "
@@ -97,7 +110,7 @@ def _list_checks(categories) -> int:
         if check.category != current:
             current = check.category
             print(f"   {ui.BOLD}{ui.FROST}{check.category}{ui.RESET}")
-        print(f"     {ui.MIST}{check.id:<22}{ui.RESET} {check.title}")
+        print(f"     {ui.MIST}{check.id:<28}{ui.RESET} {check.title}")
     print()
     return 0
 
@@ -108,6 +121,23 @@ def _exit_code(report: Report, fail_on: str | None) -> int:
     threshold = Severity[fail_on.upper()]
     worst = max((f.severity for f in report.findings), default=Severity.OK)
     return 1 if worst >= threshold else 0
+
+
+def _run_single_audit(args, categories) -> Report:
+    report = run_audit(categories, progress=None if args.json or args.watch else _progress)
+
+    if args.output:
+        Path(args.output).write_text(json.dumps(report.to_dict(), indent=2))
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        ui.render_report(report, show_ok=args.show_ok)
+        if args.output:
+            print(f"   {ui.DIM}JSON report written to {args.output}{ui.RESET}\n")
+
+    sys.stdout.flush()
+    return report
 
 
 def main(argv=None) -> int:
@@ -127,19 +157,26 @@ def main(argv=None) -> int:
     if not args.json:
         ui.print_banner()
 
-    report = run_audit(categories, progress=None if args.json else _progress)
+    if args.watch:
+        interval = max(1, args.watch)
+        print(f"\n   {ui.VIOLET}Entering continuous watch mode (interval: {interval}s). Press Ctrl+C to exit.{ui.RESET}\n")
+        sys.stdout.flush()
+        prev_risk = None
+        while True:
+            t_str = time.strftime("%H:%M:%S")
+            print(f"{ui.DIM}─── [{t_str}] Running audit cycle ─────────────────────────{ui.RESET}")
+            report = _run_single_audit(args, categories)
+            if prev_risk is not None and report.risk_score != prev_risk:
+                change = report.risk_score - prev_risk
+                diff_sign = f"+{change}" if change > 0 else f"{change}"
+                print(f"   {ui.BOLD}{ui.SEVERITY_STYLE[Severity.HIGH][0]}ALERT: Risk score changed by {diff_sign} (now {report.risk_score}){ui.RESET}\n")
+            sys.stdout.flush()
+            prev_risk = report.risk_score
+            time.sleep(interval)
 
-    if args.output:
-        Path(args.output).write_text(json.dumps(report.to_dict(), indent=2))
-
-    if args.json:
-        print(json.dumps(report.to_dict(), indent=2))
-    else:
-        ui.render_report(report, show_ok=args.show_ok)
-        if args.output:
-            print(f"   {ui.DIM}JSON report written to {args.output}{ui.RESET}\n")
-
+    report = _run_single_audit(args, categories)
     return _exit_code(report, args.fail_on)
+
 
 
 if __name__ == "__main__":
@@ -148,3 +185,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         sys.stderr.write("\nInterrupted.\n")
         raise SystemExit(130)
+

@@ -158,8 +158,30 @@ def render_report(report: Report, show_ok: bool = False) -> None:
     width = _width()
     print()
     _render_summary(report, width)
+    _render_priority_actions(report, width)
     _render_findings(report, width, show_ok)
     _render_footer(report, width)
+
+
+def _render_priority_actions(report: Report, width: int) -> None:
+    """Render top priority actions for highest severity findings."""
+    urgent = [f for f in report.actionable if f.severity >= Severity.MEDIUM and f.recommendation]
+    if not urgent:
+        return
+
+    top = urgent[:4]
+    print(panel_top("TOP REMEDIATION PRIORITIES", width, color=VIOLET))
+    for i, f in enumerate(top, start=1):
+        col, label = SEVERITY_STYLE[f.severity]
+        title_trunc = f.title if len(f.title) <= 46 else f.title[:43] + "..."
+        print(panel_line(f"{BOLD}{col}[{label}]{RESET} {BOLD}{i}. {title_trunc}{RESET}", width, color=VIOLET))
+        rec_trunc = f.recommendation if len(f.recommendation) <= 56 else f.recommendation[:53] + "..."
+        print(panel_line(f"   {INK}➜ {rec_trunc}{RESET}", width, color=VIOLET))
+        if i < len(top):
+            print(panel_line("", width, color=VIOLET))
+    print(panel_bottom(width, color=VIOLET))
+    print()
+
 
 
 def _render_summary(report: Report, width: int) -> None:
