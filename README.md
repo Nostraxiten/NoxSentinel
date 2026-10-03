@@ -130,8 +130,6 @@ tests/
 python -m unittest discover -s tests
 ```
 
-## Scope & ethics
+## License
 
-Nox Sentinel is a **defensive** tool intended to be run on hosts you own or
-are authorised to assess. It reports weaknesses and how to fix them; it does
-not exploit anything and makes no destructive changes.
+MIT. See [LICENSE](LICENSE).
